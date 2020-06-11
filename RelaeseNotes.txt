@@ -1,5 +1,10 @@
 Release Notes
 
+v0.0.2 11.06.2020
+- Klasse zum auswerten des Tasterdruck hinzugefügt; Entprellt und mit Erkennung eines langen Druck
+- Ansteuerung des Motors über Tastendruck hinzugefügt
+- Übersetzung fehlerfrei; Bereit für ersten Test
+
 v0.0.1 10.06.2020
 - Initiale version
 - Definiere IO Pin variablen
