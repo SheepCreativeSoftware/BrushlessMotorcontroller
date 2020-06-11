@@ -1,5 +1,11 @@
 Release Notes
 
+v0.1.1 11.06.2020
+- auslesen der Akkuspannung möglich
+- definieren der Widerstände für Akkuspannungsmessung möglich
+- Drehzahlmessung hinzugefügt
+- Bild mit Beispiel Verdrahtung
+
 v0.1.0 11.06.2020
 - erste Version mit Grundfunktion
 - Code optimiert
