@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.1.0
- * Date: 11.06.2020 | 16:56
+ * BrushlessMotorcontroller v0.1.2
+ * Date: 11.06.2020 | 20:08
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -13,7 +13,8 @@
  * See the GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License along with this program. 
- * If not, see <https://www.gnu.org/licenses/>.
+ * If not, see <https://www.gnu.org/licenses/>. 
+ * [In Deutsch]: <https://www.gnu.de/documents/gpl-3.0.de.html>
  */
 
 /************************************
@@ -68,7 +69,7 @@ uint32_t spannungUmgerechnet = 0;
 
 uint16_t drehzahl = 0;
 volatile uint16_t volleUmdrehungen = 0;
-uint32_t letzeZeit = 0;
+uint32_t letzteZeit = 0;
 
 //Vorkompilierte Definitionen
 #define MOTOR_PULSE_BREITE (MOTOR_MAX_PULSE - MOTOR_MIN_PULSE)
@@ -157,13 +158,18 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 	uint32_t leseWert = analogRead(inAkkuSpannung);
 	spannungUmgerechnet = map(leseWert, 0, 1023, SPANNUNG_IN_MIN, SPANNUNG_IN_MAX_CALC);
 	
+	//Wenn letzte Zeit größer als jetztige, dann gab es einen overflow (nach 50 Tagen), dann setzt letzte Zeit zurück
+	if(letzteZeit > millis()) letzteZeit = 0;
 	//Berechnung der Drehzahl 2 * (halbe Sekunde / Zeitdauer * Anzahl Impulse)
 	if (volleUmdrehungen >= 10) {
-		drehzahl = 30*1000/(millis() - letzeZeit)*volleUmdrehungen;
+		drehzahl = 30*1000/(millis() - letzteZeit)*volleUmdrehungen;
 		drehzahl = drehzahl *2;
-		letzeZeit = millis();
+		letzteZeit = millis();
 		volleUmdrehungen = 0;
 	}
+	//wenn kein impuls seit länger als einer Minute kam, dann setzte drehzahl zurück.
+	
+	if((millis() - letzteZeit) > 60000) drehzahl = 0;
 	#if (DEBUGLEVEL >= 1)
 		//Wenn einer der Taster gedrückt wird
 		if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
