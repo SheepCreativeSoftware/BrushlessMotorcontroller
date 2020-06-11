@@ -1,5 +1,8 @@
 Release Notes
 
+v0.1.3 11.06.2020
+- optimierungen
+
 v0.1.2 11.06.2020
 - optimierung der Drehzahl auswertung
 

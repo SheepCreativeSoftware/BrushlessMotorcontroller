@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.1.2
- * Date: 11.06.2020 | 20:08
+ * BrushlessMotorcontroller v0.1.3
+ * Date: 11.06.2020 | 23:31
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -31,7 +31,7 @@
 #define SPANNUNG_KORREKTUR 0									//Korrektur der Spannung in mV
 	
 //Ändere diesen Wert für unterschiedliche Debuging level
-#define DEBUGLEVEL 3										//0 = Aus | 1 = N/A | >2 = Serial Monitor
+#define DEBUGLEVEL 0										//0 = Aus | 1 = N/A | >2 = Serial Monitor
 
 /************************************
  * Zusätzliche Dateien einbinden
@@ -181,20 +181,20 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 	#if (DEBUGLEVEL >= 2)
 		//Wird jede Sekunde ausgeführt
 		if((millis()%1000 >= 500) && (serialIsSent == false)) {
-			SerialUSB.println("----PWM Pulsedauer----");
+			SerialUSB.println("--PWM Pulsedauer--");
 			SerialUSB.print(pwmPulse);
 			SerialUSB.println("µs");
-			SerialUSB.println("------Stufe------");
+			SerialUSB.println("------Stufe-------");
 			SerialUSB.println(motorStufe);
-			SerialUSB.println("-----Analog----");
+			SerialUSB.println("----Analogwert----");
 			SerialUSB.println(leseWert);
-			SerialUSB.println("-----Spannung----");
+			SerialUSB.println("-----Spannung-----");
 			SerialUSB.print(spannungUmgerechnet);
 			SerialUSB.println(" mV");
-			SerialUSB.println("-----Drehzahl----");
+			SerialUSB.println("-----Drehzahl-----");
 			SerialUSB.print(drehzahl);
 			SerialUSB.println(" U/min");
-			SerialUSB.println("-------End-------");
+			SerialUSB.println("-------End--------");
 			serialIsSent = true;
 		} else if((millis()%1000 < 500) && (serialIsSent == true)) {
 			serialIsSent = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
