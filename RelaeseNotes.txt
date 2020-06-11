@@ -1,6 +1,10 @@
 Release Notes
 
-v0.0.3
+v0.1.0 11.06.2020
+- erste Version mit Grundfunktion
+- Code optimiert
+
+v0.0.3 11.06.2020
 - Test durchgeführt
 - Debug Ausgabe hinzugefügt
 - diverse Fehler behoben

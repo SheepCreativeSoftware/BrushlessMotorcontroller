@@ -1,7 +1,7 @@
 /*
- * BrushlessMotorcontroller v0.0.3
- * Date: 11.06.2020 | 15:29
- * <Truck Light and function module>
+ * BrushlessMotorcontroller v0.1.0
+ * Date: 11.06.2020 | 16:56
+ * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
  * This program is free software: you can redistribute it and/or modify it 
@@ -26,7 +26,7 @@
 #define ZEIT_TASTER_LANG 2000								//Zeit für einen Langen Tasterdruck
 	
 //Ändere diesen Wert für unterschiedliche Debuging level
-#define DEBUGLEVEL 3										//0 = Aus | 1 = N/A | >2 = Serial Monitor
+#define DEBUGLEVEL 0										//0 = Aus | 1 = N/A | >2 = Serial Monitor
 
 /************************************
  * Zusätzliche Dateien einbinden
@@ -36,19 +36,19 @@
 /************************************
  * Definition IO Pins
  ************************************/
-//Pinout Arduino Nano:
-//Serial 0+1 (kein HW Serial) | Interrupt 2+3 | PWM 3, 5, 6, 9, 10, 11 | LED 13 | I2C A4(SDA) + A5(SCL) |
-//Servo Lib deaktiviert PWM funktionalität für pin 9 und 10
-
+/* Pinout Arduino Nano:
+ * Serial 0+1 (kein HW Serial) | Interrupt 2+3 | PWM 3, 5, 6, 9, 10, 11 | LED 13 | I2C A4(SDA) + A5(SCL) |
+ * Servo Lib deaktiviert PWM funktionalität für pin 9 und 10
+ */
+ 
 //Inputs
-//Pin 0+1 Reservieren für Serielle Kommunikation über USB!
+//Pin 0+1 Reserviert halten für Serielle Kommunikation über USB!
 #define inTasterHoch 3            							//Pin des Taster um die Drehzahl zu erhöhen
 #define inTasterRunter 4            						//Pin des Taster um die Drehzahl zu verringern
 
-
 //Outputs
 #define outMotorRegler 9                    				//Pin für Servo PWM Signal für Motor Regler
-#define statusLED 13
+#define statusLED 13										//Pin mit Status LED
 
 /************************************
  * Definition und Initialiierung
@@ -100,7 +100,7 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	motorRegler.writeMicroseconds(MOTOR_MIN_PULSE); 		//Setze Ausgang auf 0% PWM (0-100% -> 1000-2000µs)
 	
 	#if (DEBUGLEVEL >=1)									//Bedingte Kompilierung
-		pinMode(statusLED, OUTPUT);
+		pinMode(statusLED, OUTPUT);							//status LED definieren zur Anzeige des Status
 	#endif		
 	#if (DEBUGLEVEL >=2)									//Bedingte Kompilierung
 		SerialUSB.begin(9600);  							//Starte Serielle Kommunikation per USB
@@ -131,13 +131,15 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 	}
 	motorRegler.writeMicroseconds(pwmPulse);
 	#if (DEBUGLEVEL >= 1)
+		//Wenn einer der Taster gedrückt wird
 		if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
-			digitalWrite(statusLED, HIGH);
+			digitalWrite(statusLED, HIGH);					//Dann Setze Status LED
 		} else {
-			digitalWrite(statusLED, LOW);
+			digitalWrite(statusLED, LOW);					//Ansonsten setzte Sie zurück
 		}
 	#endif
 	#if (DEBUGLEVEL >= 2)
+		//Wird jede Sekunde ausgeführt
 		if((millis()%1000 >= 500) && (serialIsSent == false)) {
 			SerialUSB.println("----PWM Pulse----");
 			SerialUSB.println(pwmPulse);
@@ -150,11 +152,11 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 			SerialUSB.println("-------End-------");
 			serialIsSent = true;
 		} else if((millis()%1000 < 500) && (serialIsSent == true)) {
-			serialIsSent = false;
+			serialIsSent = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
 		}
 	#endif
 }
-
+//22 3,873 16 2,816
 void TasterEntprellen::init(uint8_t tasterPin, uint8_t pinModus, uint16_t zeitLang){ //Pin des Tasters, Modus: INPUT oder INPUT_PULLUP, Dauer für lang
 	zeitLangerDruck = zeitLang;							//Speichere Zeit in Instanz ab
 	pin = tasterPin;									//Speichere Pin in Instanz ab
