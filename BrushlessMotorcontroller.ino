@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.0.2
- * Date: 11.06.2020 | 02:48
+ * BrushlessMotorcontroller v0.0.3
+ * Date: 11.06.2020 | 15:29
  * <Truck Light and function module>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -19,19 +19,19 @@
 /************************************
  * Programm Konfiguration
  ************************************/
-#define PROG_VERSION 1                   			//Version
-#define MOTOR_MIN_PULSE	1000						//Minimale Position des PWM Servo signal in millisekunden | Default: 1000
-#define MOTOR_MAX_PULSE	2000						//Maximale Position des PWM Servo signal in millisekunden | Default: 2000
-#define MOTOR_STUFEN 10								//Stufenanzahl in welchen der Motor geschaltet werden kann.
-#define ZEIT_TASTER_LANG 3000						//Zeit für einen Langen Tasterdruck
-
+#define PROG_VERSION 1                   					//Version
+#define MOTOR_MIN_PULSE	1000								//Minimale Position des PWM Servo signal in millisekunden | Default: 1000
+#define MOTOR_MAX_PULSE	2000								//Maximale Position des PWM Servo signal in millisekunden | Default: 2000
+#define MOTOR_STUFEN 10										//Stufenanzahl in welchen der Motor geschaltet werden kann.
+#define ZEIT_TASTER_LANG 2000								//Zeit für einen Langen Tasterdruck
+	
 //Ändere diesen Wert für unterschiedliche Debuging level
-#define DEBUGLEVEL 3								//0 = Aus | 1 = N/A | >2 = Serial Monitor
+#define DEBUGLEVEL 3										//0 = Aus | 1 = N/A | >2 = Serial Monitor
 
 /************************************
  * Zusätzliche Dateien einbinden
  ************************************/
-#include <Servo.h>									//Bibliothek für Servo PWM Ausgabe
+#include <Servo.h>											//Bibliothek für Servo PWM Ausgabe
 
 /************************************
  * Definition IO Pins
@@ -42,12 +42,13 @@
 
 //Inputs
 //Pin 0+1 Reservieren für Serielle Kommunikation über USB!
-#define inTasterHoch 3            					//Pin des Taster um die Drehzahl zu erhöhen
-#define inTasterRunter 4            				//Pin des Taster um die Drehzahl zu verringern
+#define inTasterHoch 3            							//Pin des Taster um die Drehzahl zu erhöhen
+#define inTasterRunter 4            						//Pin des Taster um die Drehzahl zu verringern
 
 
 //Outputs
-#define outMotorRegler 9                    		//Pin für Servo PWM Signal für Motor Regler
+#define outMotorRegler 9                    				//Pin für Servo PWM Signal für Motor Regler
+#define statusLED 13
 
 /************************************
  * Definition und Initialiierung
@@ -56,53 +57,59 @@
 //Globale Programm Variablen
 uint16_t pwmPulse = MOTOR_MIN_PULSE;
 uint8_t motorStufe = 0;
+bool serialIsSent = 0;
 
 //Vorkompilierte Definitionen
-#define MOTOR_PULSE_BREITE MOTOR_MAX_PULSE - MOTOR_MIN_PULSE
-#define MOTOR_PULSE_STUFE MOTOR_PULSE_BREITE / MOTOR_STUFEN
-
+#define MOTOR_PULSE_BREITE (MOTOR_MAX_PULSE - MOTOR_MIN_PULSE)
+#define MOTOR_PULSE_STUFE (MOTOR_PULSE_BREITE / MOTOR_STUFEN)
+#ifndef	SerialUSB
+	#define SerialUSB SERIAL_PORT_MONITOR
+#endif
 //Funktionen
 
 
 //Klassen
 class TasterEntprellen {
 		uint8_t pin;
-		uint8_t modus;								//INPUT 0x0 | INPUT_PULLUP 0x2
+		uint8_t modus;										//INPUT 0x0 | INPUT_PULLUP 0x2
 		bool tasterStatusLang;
 		bool letzterTasterStatus;
 		uint8_t entprellenVerzoegerung = 50;
-		uint8_t zeitLangerDruck;
+		uint32_t zeitLangerDruck;
 		uint32_t letzteFlankenZeit;
     public:
 		void init(uint8_t tasterPin, uint8_t pinModus, uint16_t zeitLang);	//Pin des Tasters und Modus: INPUT oder INPUT_PULLUP
 		uint8_t leseTaster();								//Gibt den aktuellen Status des Tasters entprellt wieder
 };
 
-TasterEntprellen tasterHoch;
-TasterEntprellen tasterRunter;
-Servo motorRegler;
+TasterEntprellen tasterHoch;								//definiere Klassen Instanz für Taster
+TasterEntprellen tasterRunter;								//definiere Klassen Instanz für Taster
+Servo motorRegler;											//definiere Klassen Instanz für Servo
 
-void setup() {										// Setup Code, wird einmalig am Start ausgeführt
+void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	/************************************
 	* Setup Inputs 
 	************************************/
-	tasterHoch.init(inTasterHoch, INPUT_PULLUP, ZEIT_TASTER_LANG);
-	tasterRunter.init(inTasterHoch, INPUT_PULLUP, ZEIT_TASTER_LANG);
-	//TODO: Pins definieren
+	//definiere Tasterpin für Auswertung, mit PullUp Widerstand und Zeitvorgabe für langen Druck
+	tasterHoch.init(inTasterHoch, INPUT_PULLUP, ZEIT_TASTER_LANG);	
+	tasterRunter.init(inTasterRunter, INPUT_PULLUP, ZEIT_TASTER_LANG);
 	/************************************
 	* Setup Outputs 
 	************************************/
 	motorRegler.attach(outMotorRegler);
-	motorRegler.writeMicroseconds(MOTOR_MIN_PULSE); //Setze Ausgang auf 0% PWM (0-100% -> 1000-2000µs)
-			
-	#if (DEBUGLEVEL >=2)							//Bedingte Kompilierung
-		SerialUSB.begin(9600);  					//Starte Serielle Kommunikation per USB
+	motorRegler.writeMicroseconds(MOTOR_MIN_PULSE); 		//Setze Ausgang auf 0% PWM (0-100% -> 1000-2000µs)
+	
+	#if (DEBUGLEVEL >=1)									//Bedingte Kompilierung
+		pinMode(statusLED, OUTPUT);
+	#endif		
+	#if (DEBUGLEVEL >=2)									//Bedingte Kompilierung
+		SerialUSB.begin(9600);  							//Starte Serielle Kommunikation per USB
 	#endif
 }
 
-void loop() {                       				// Hauptcode, wiederholt sich zyklisch     
-	uint8_t dynTasterHoch = tasterHoch.leseTaster();
-	uint8_t dynTasterRunter = tasterRunter.leseTaster();
+void loop() {                       						// Hauptcode, wiederholt sich zyklisch     
+	uint8_t dynTasterHoch = tasterHoch.leseTaster();		//lese aktuellen Status des Tasters
+	uint8_t dynTasterRunter = tasterRunter.leseTaster();	//lese aktuellen Status des Tasters
 	if(dynTasterHoch && dynTasterRunter){
 		//Nichts tun
 	} else if (dynTasterHoch == 1) {
@@ -123,17 +130,36 @@ void loop() {                       				// Hauptcode, wiederholt sich zyklisch
 		motorStufe = 0;
 	}
 	motorRegler.writeMicroseconds(pwmPulse);
+	#if (DEBUGLEVEL >= 1)
+		if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
+			digitalWrite(statusLED, HIGH);
+		} else {
+			digitalWrite(statusLED, LOW);
+		}
+	#endif
+	#if (DEBUGLEVEL >= 2)
+		if((millis()%1000 >= 500) && (serialIsSent == false)) {
+			SerialUSB.println("----PWM Pulse----");
+			SerialUSB.println(pwmPulse);
+			SerialUSB.println("------Stufe------");
+			SerialUSB.println(motorStufe);
+			SerialUSB.println("---Pulsebreite--");
+			SerialUSB.println(MOTOR_PULSE_BREITE);
+			SerialUSB.println("----Puls Stufen---");
+			SerialUSB.println(MOTOR_PULSE_STUFE);
+			SerialUSB.println("-------End-------");
+			serialIsSent = true;
+		} else if((millis()%1000 < 500) && (serialIsSent == true)) {
+			serialIsSent = false;
+		}
+	#endif
 }
-// #define 
-// #define 
-// #define 
-
 
 void TasterEntprellen::init(uint8_t tasterPin, uint8_t pinModus, uint16_t zeitLang){ //Pin des Tasters, Modus: INPUT oder INPUT_PULLUP, Dauer für lang
-	zeitLangerDruck = zeitLang;
-	pin = tasterPin;
-	modus = pinModus;
-	pinMode(pin, modus);
+	zeitLangerDruck = zeitLang;							//Speichere Zeit in Instanz ab
+	pin = tasterPin;									//Speichere Pin in Instanz ab
+	modus = pinModus;									//Speichere Pinmodus in Instanz ab
+	pinMode(pin, modus);								//definiere Pin 
 }
 
 /******************************************************
@@ -146,25 +172,26 @@ uint8_t TasterEntprellen::leseTaster(){
 	uint8_t returnVal = 0;
 	//Invertiert einlesen, wenn Pullup Widerstand gesetzt ist.
 	if(modus == INPUT_PULLUP) {						
-		leseStatus = !digitalRead(pin);	//lese Taster Status (!)Invertiert
-	} else {										//Ansonsten behandle eingang als Input ohne Pullup
-		leseStatus = digitalRead(pin);	//lese Taster Status Normal
+		leseStatus = !digitalRead(pin);					//lese Taster Status (!)Invertiert
+	} else {											//Ansonsten behandle eingang als Input ohne Pullup
+		leseStatus = digitalRead(pin);					//lese Taster Status Normal
 	} 
-
+	//wenn sich der status des Tasters verändert hat
 	if (leseStatus != letzterTasterStatus) {
+		//wenn der Taster losgelassen wurde und außreichend lange gedrückt wurde
 		if (((millis() - letzteFlankenZeit) > entprellenVerzoegerung) && (letzterTasterStatus) && (!tasterStatusLang)) {
-			returnVal = 1;
+			returnVal = 1;								//dann gib 1 zurück
 		} else {
-			returnVal = 0;
-			tasterStatusLang = false;
+			returnVal = 0;								//ansonsten gib 0 zurück
+			tasterStatusLang = false;					//setze taster Lang Auswertung zurück
 		}
-		letzteFlankenZeit = millis();
+		letzteFlankenZeit = millis();					//Speichere letzte Zeit
 		letzterTasterStatus = leseStatus;				//Speichere letzten Status
 	}
-	//warte kurz, bis das Signal lange genug ansteht.
+	//Wenn der Taster lange genug gedrückt wird
 	if(((millis() - letzteFlankenZeit) > zeitLangerDruck) && (letzterTasterStatus)) {
-		returnVal = 2;
-		tasterStatusLang = true;
+		returnVal = 2;									//dann gib 2 zurück
+		tasterStatusLang = true;						//Setze Status um zu vermeiden, dass Vergeleich zum entprellen Wahr wird.
 	}
-	return returnVal;
+	return returnVal;									//gibt Wert zurück an voherige Instanz
 }
