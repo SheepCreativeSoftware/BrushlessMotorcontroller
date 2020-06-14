@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.1.4
- * Date: 14.06.2020 | 19:39
+ * BrushlessMotorcontroller v0.1.5
+ * Date: 14.06.2020 | 23:21
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -32,15 +32,15 @@
 	
 //Ändere diesen Wert für unterschiedliche Debuging level
 #define DEBUGLEVEL 3										//0 = Aus | 1 = N/A | >2 = Serial Monitor
-
+#define DISPLAY_AKTIV 1
 /************************************
  * Zusätzliche Dateien einbinden
  ************************************/
 #include <Servo.h>											//Bibliothek für Servo PWM Ausgabe
 #include <Wire.h>
+#include <EEPROM.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <EEPROM.h>
 /************************************
  * Definition IO Pins
  ************************************/
@@ -68,14 +68,16 @@
 uint16_t pwmPulse = MOTOR_MIN_PULSE;
 uint8_t motorStufe = 0;
 bool serialIsSent = 0;
+bool displaySenden = 0;
 uint32_t spannungUmgerechnet = 0;
 
 uint16_t drehzahl = 0;
 volatile uint16_t volleUmdrehungen = 0;
 uint32_t letzteZeit = 0;
 
+#if (DISPLAY_AKTIV ==1)
 uint8_t displayAdress = 0;
-
+#endif
 //Vorkompilierte Definitionen
 #define MOTOR_PULSE_BREITE (MOTOR_MAX_PULSE - MOTOR_MIN_PULSE)
 #define MOTOR_PULSE_STUFE (MOTOR_PULSE_BREITE / MOTOR_STUFEN)
@@ -92,7 +94,11 @@ uint8_t displayAdress = 0;
 #define SPANNUNG_IN_MAX_CALC (SPANNUNG_IN_MAX - SPANNUNG_KORREKTUR)
 //Funktionen
 void interruptRPM();
+#if (DISPLAY_AKTIV ==1)
+void displayStart();
+void displayAnzeigen();
 uint8_t i2cScan();
+#endif
 
 //Klassen
 class TasterEntprellen {
@@ -111,11 +117,12 @@ class TasterEntprellen {
 TasterEntprellen tasterHoch;								//definiere Klassen Instanz für Taster
 TasterEntprellen tasterRunter;								//definiere Klassen Instanz für Taster
 Servo motorRegler;											//definiere Klassen Instanz für Servo
-
+#if (DISPLAY_AKTIV ==1)
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#endif
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 void setup() {												// Setup Code, wird einmalig am Start ausgeführt
@@ -147,43 +154,9 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	#if (DEBUGLEVEL >=2)									//Bedingte Kompilierung
 		SerialUSB.begin(9600);  							//Starte Serielle Kommunikation per USB
 	#endif
-	Wire.begin();
-	displayAdress = EEPROM.read(0);							//lese Display Adresse von EEPROM Adresse 0
-	#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
-		SerialUSB.println(F("EEPROM Wert:"));
-		SerialUSB.println(displayAdress,HEX);
+	#if (DISPLAY_AKTIV ==1)
+	displayStart();
 	#endif
-	
-	uint8_t error;
-	if(displayAdress >= 127) {
-		displayAdress = i2cScan();
-	} else {
-		Wire.beginTransmission(displayAdress);
-		error = Wire.endTransmission();
-		if(error != 0) {
-			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
-				SerialUSB.println(F("Adresse aus EMPROM nicht ansprechbar"));
-			#endif
-			displayAdress = i2cScan();
-			EEPROM.update(0, displayAdress);
-		} else {
-			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
-				SerialUSB.println(F("Adresse aus EEPROM ansprechbar!"));
-			#endif
-		}
-	}
-	
-	if(!display.begin(SSD1306_SWITCHCAPVCC, displayAdress, true, false)) { // Address 0x3D for 128x64
-		#if (DEBUGLEVEL >=3)
-		Serial.println(F("SSD1306 Zuweisung gescheitert"));
-		#endif
-		for(;;); // Don't proceed, loop forever
-	}
-
-	// Show initial display buffer contents on the screen --
-	// the library initializes this with an Adafruit splash screen.
-	display.display();
-	
 }
 
 void loop() {                       						// Hauptcode, wiederholt sich zyklisch     
@@ -255,6 +228,9 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 			serialIsSent = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
 		}
 	#endif
+	#if (DISPLAY_AKTIV ==1)
+	displayAnzeigen();
+	#endif
 }
 
 void interruptRPM() { //Wird bei jedem Impuls ausgeführt.
@@ -302,6 +278,93 @@ uint8_t TasterEntprellen::leseTaster(){
 	return returnVal;									//gibt Wert zurück an voherige Instanz
 }
 
+#if (DISPLAY_AKTIV ==1)
+void displayStart() {
+	
+	Wire.begin();
+	displayAdress = EEPROM.read(0);							//lese Display Adresse von EEPROM Adresse 0
+	#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+		SerialUSB.print(F("EEPROM Wert: 0x"));
+		if (displayAdress<16) {
+				SerialUSB.print(F("0"));
+			}
+		SerialUSB.println(displayAdress,HEX);
+	#endif
+	
+	uint8_t error;
+	if(displayAdress >= 127) {
+		displayAdress = i2cScan();
+	} else {
+		Wire.beginTransmission(displayAdress);
+		error = Wire.endTransmission();
+		if(error != 0) {
+			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+				SerialUSB.println(F("Adresse aus EMPROM nicht ansprechbar"));
+			#endif
+			displayAdress = i2cScan();
+			EEPROM.update(0, displayAdress);
+		} else {
+			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+				SerialUSB.println(F("Adresse aus EEPROM ansprechbar!"));
+			#endif
+		}
+	}
+	
+	if(!display.begin(SSD1306_SWITCHCAPVCC, displayAdress, true, false)) { // Address 0x3D for 128x64
+		#if (DEBUGLEVEL >=3)
+		Serial.println(F("SSD1306 Zuweisung gescheitert"));
+		#endif
+		for(;;); // Don't proceed, loop forever
+	}
+
+	// Show initial display buffer contents on the screen --
+	// the library initializes this with an Adafruit splash screen.
+	display.display();
+}
+void displayAnzeigen() {
+	if((millis()%1000 >= 500) && (displaySenden == false)) {
+				// ssd1306_setFixedFont(ssd1306xled_font6x8);
+		// ssd1306_printFixed (0,  8, "Line 1. Normal text", STYLE_NORMAL);
+		// ssd1306_printFixed (0, 16, "Line 2. Bold text", STYLE_BOLD);
+		// ssd1306_printFixed (0, 24, "Line 3. Italic text", STYLE_ITALIC);
+		// ssd1306_printFixedN (0, 32, "Line 4. Double size", STYLE_BOLD, FONT_SIZE_2X);
+		// uint8_t buffer[64*32/8];
+		// NanoCanvas canvas(64,32, buffer);
+		// ssd1306_setFixedFont(ssd1306xled_font6x8);
+		// ssd1306_clearScreen();
+		// canvas.clear();
+		// ssd1306_setCursor(10, 10);
+		// ssd1306_write(pwmPulse);
+		// // canvas.fillRect(10, 3, 80, 10, 0xFF);
+		// //ssd1306_printFixed (10, 10, pwmPulse, STYLE_NORMAL);
+		// canvas.drawRect(1, 1, 30, 10);
+		// canvas.blt(1, 1);
+		display.clearDisplay();
+		display.setTextSize(1);             // Normal 1:1 pixel scale
+		display.setTextColor(SSD1306_WHITE);        // Draw white text
+		display.setCursor(0,0);             // Start at top-left corner
+		//display.println(F("Hello, world!"));
+		//display.println(pwmPulse);
+		
+		display.print(F("Pulsedauer: "));
+		display.print(pwmPulse);
+		display.println(F("us"));
+		display.print(F("Stufe:      "));
+		display.println(motorStufe);
+		display.print(F("Spannung:   "));
+		display.print(spannungUmgerechnet);
+		display.println(F("mV"));
+		display.print(F("Drehzahl:   "));
+		display.print(drehzahl);
+		display.println(F(" U/min"));
+		display.display();
+		displaySenden = true;
+	} else if((millis()%1000 < 500) && (displaySenden == true)) {
+		displaySenden = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
+	}
+	
+}
+
 uint8_t i2cScan() {
 	uint8_t error, address, outValue;
 	uint8_t nDevices = 0;
@@ -314,7 +377,7 @@ uint8_t i2cScan() {
 		#if (DEBUGLEVEL >= 3)
 			SerialUSB.print(F("Prüfe I2C Adresse: 0x"));
 			if (address<16) {
-				Serial.print(F("0"));
+				SerialUSB.print(F("0"));
 			} 
 			SerialUSB.println(address, HEX);
 		#endif
@@ -333,7 +396,7 @@ uint8_t i2cScan() {
 		#if (DEBUGLEVEL >= 3)
 			SerialUSB.print(F("Gerät gefunden auf Adresse: 0x"));
 			if (address<16) {
-				Serial.print(F("0"));
+				SerialUSB.print(F("0"));
 			} 
 			SerialUSB.println(address, HEX);
 		#endif
@@ -341,4 +404,5 @@ uint8_t i2cScan() {
 		
 	return outValue;
 }
+#endif
 
