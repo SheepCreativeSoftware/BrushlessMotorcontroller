@@ -1,6 +1,6 @@
 /*
  * BrushlessMotorcontroller v0.1.4
- * Date: 14.06.2020 | 19:39
+ * Date: 14.06.2020 | 12:54
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -154,26 +154,62 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 		SerialUSB.println(displayAdress,HEX);
 	#endif
 	
+
 	uint8_t error;
-	if(displayAdress >= 127) {
-		displayAdress = i2cScan();
-	} else {
-		Wire.beginTransmission(displayAdress);
-		error = Wire.endTransmission();
-		if(error != 0) {
-			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
-				SerialUSB.println(F("Adresse aus EMPROM nicht ansprechbar"));
+	uint8_t nDevices = 0;
+	Wire.beginTransmission(displayAdress);
+	error = Wire.endTransmission();
+	if(error != 0) {
+		#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+			SerialUSB.println(F("Adresse aus EMPROM nicht ansprechbar"));
+		#endif
+		uint8_t address;
+		
+		SerialUSB.println(F("--Scane I2C Bus--"));
+		for(address = 1; address <=127 ; address++ ) {
+		// der Scan verwendet den Rückgabewert von Write.endTransmisstion 
+		// um zu sehen ob ein Gerät angewortet hat
+			Wire.beginTransmission(address);
+			error = Wire.endTransmission();
+			#if (DEBUGLEVEL >= 3)
+				SerialUSB.print(F("Prüfe I2C Adresse: "));
+				if (address<16) {
+					SerialUSB.print(F("0x0"));
+				} else {
+					SerialUSB.print(F("0x"));
+				}
+				SerialUSB.println(address, HEX);
 			#endif
-			displayAdress = i2cScan();
-			EEPROM.update(0, displayAdress);
+			if (error == 0) {
+				nDevices++;
+				address = 127;
+				break;
+			}
+		}
+		if (nDevices == 0) {
+			#if (DEBUGLEVEL >= 3)
+				SerialUSB.println(F("--Kein Gerät gefunden--"));
+			#endif
 		} else {
-			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
-				SerialUSB.println(F("Adresse aus EEPROM ansprechbar!"));
+			#if (DEBUGLEVEL >= 3)
+				SerialUSB.print(F("Gerät gefunden auf Adresse: "));
+				if (address<16) {
+					SerialUSB.print(F("0x0"));
+				} else {
+					SerialUSB.print(F("0x"));
+				}
+				SerialUSB.println(address, HEX);
+				displayAdress = address;
 			#endif
 		}
+		
+		EEPROM.update(0, displayAdress);
+	} else {
+		#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+			SerialUSB.println("Adresse aus EEPROM ansprechbar!");
+		#endif
 	}
-	
-	if(!display.begin(SSD1306_SWITCHCAPVCC, displayAdress, true, false)) { // Address 0x3D for 128x64
+	if(!display.begin(SSD1306_SWITCHCAPVCC, displayAdress, false, false)) { // Address 0x3D for 128x64
 		#if (DEBUGLEVEL >=3)
 		Serial.println(F("SSD1306 Zuweisung gescheitert"));
 		#endif
@@ -236,20 +272,20 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 	#if (DEBUGLEVEL >= 2)
 		//Wird jede Sekunde ausgeführt
 		if((millis()%1000 >= 500) && (serialIsSent == false)) {
-			SerialUSB.println(F("--PWM Pulsedauer--"));
+			SerialUSB.println("--PWM Pulsedauer--");
 			SerialUSB.print(pwmPulse);
-			SerialUSB.println(F("µs"));
-			SerialUSB.println(F("------Stufe-------"));
+			SerialUSB.println("µs");
+			SerialUSB.println("------Stufe-------");
 			SerialUSB.println(motorStufe);
-			SerialUSB.println(F("----Analogwert----"));
+			SerialUSB.println("----Analogwert----");
 			SerialUSB.println(leseWert);
-			SerialUSB.println(F("-----Spannung-----"));
+			SerialUSB.println("-----Spannung-----");
 			SerialUSB.print(spannungUmgerechnet);
-			SerialUSB.println(F(" mV"));
-			SerialUSB.println(F("-----Drehzahl-----"));
+			SerialUSB.println(" mV");
+			SerialUSB.println("-----Drehzahl-----");
 			SerialUSB.print(drehzahl);
-			SerialUSB.println(F(" U/min"));
-			SerialUSB.println(F("-------End--------"));
+			SerialUSB.println(" U/min");
+			SerialUSB.println("-------End--------");
 			serialIsSent = true;
 		} else if((millis()%1000 < 500) && (serialIsSent == true)) {
 			serialIsSent = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
@@ -301,44 +337,48 @@ uint8_t TasterEntprellen::leseTaster(){
 	}
 	return returnVal;									//gibt Wert zurück an voherige Instanz
 }
-
+/*
 uint8_t i2cScan() {
 	uint8_t error, address, outValue;
 	uint8_t nDevices = 0;
-	SerialUSB.println(F("--Scane I2C Bus--"));
+	SerialUSB.println("--Scane I2C Bus--");
 	for(address = 1; address <=127 ; address++ ) {
 	// der Scan verwendet den Rückgabewert von Write.endTransmisstion 
 	// um zu sehen ob ein Gerät angewortet hat
 		Wire.beginTransmission(address);
 		error = Wire.endTransmission();
 		#if (DEBUGLEVEL >= 3)
-			SerialUSB.print(F("Prüfe I2C Adresse: 0x"));
+			SerialUSB.print("Prüfe I2C Adresse: ");
 			if (address<16) {
-				Serial.print(F("0"));
-			} 
+				Serial.print("0x0");
+			} else {
+				Serial.print("0x");
+			}
 			SerialUSB.println(address, HEX);
 		#endif
 		if (error == 0) {
 			nDevices++;
 			outValue = address;
-			address = 127;
+			break;
 		}
 	}
 	if (nDevices == 0) {
 		outValue = 0;
 		#if (DEBUGLEVEL >= 3)
-			SerialUSB.println(F("--Kein Gerät gefunden--"));
+			SerialUSB.println("--Kein Gerät gefunden--");
 		#endif
 	} else {
 		#if (DEBUGLEVEL >= 3)
-			SerialUSB.print(F("Gerät gefunden auf Adresse: 0x"));
+			SerialUSB.print("Gerät gefunden auf Adresse: ");
 			if (address<16) {
-				Serial.print(F("0"));
-			} 
+				Serial.print("0x0");
+			} else {
+				Serial.print("0x");
+			}
 			SerialUSB.println(address, HEX);
 		#endif
 	}
 		
 	return outValue;
-}
+}*/
 
