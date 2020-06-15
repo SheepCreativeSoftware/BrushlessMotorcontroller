@@ -1,6 +1,6 @@
 Release Notes
 
-v0.1.5 15.06.2020
+v0.1.6 15.06.2020
 - Schaltplan aktualisiert
 - 2.te .ino Datei gelöscht
 
