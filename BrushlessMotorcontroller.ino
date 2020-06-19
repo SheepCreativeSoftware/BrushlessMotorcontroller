@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.1.5
- * Date: 14.06.2020 | 23:21
+ * BrushlessMotorcontroller v0.1.6
+ * Date: 19.06.2020 | 23:37
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -70,6 +70,10 @@ uint8_t motorStufe = 0;
 bool serialIsSent = 0;
 bool displaySenden = 0;
 uint32_t spannungUmgerechnet = 0;
+uint32_t spannungVoltDEC0 = 0;
+uint32_t spannungVoltDEC1 = 0;
+bool blinkPulse;
+
 
 uint16_t drehzahl = 0;
 volatile uint16_t volleUmdrehungen = 0;
@@ -92,6 +96,8 @@ uint8_t displayAdress = 0;
 #define SPANNUNG_IN_MAX SPANNUNG_OUT_MAX / (WIDERSTAND_R2 / (WIDERSTAND_R2 + WIDERSTAND_R1))
 #define SPANNUNG_IN_MIN 0
 #define SPANNUNG_IN_MAX_CALC (SPANNUNG_IN_MAX - SPANNUNG_KORREKTUR)
+#define SPANNUNG_IN_BEREICH (SPANNUNG_IN_MAX_CALC - SPANNUNG_IN_MIN)
+
 //Funktionen
 void interruptRPM();
 #if (DISPLAY_AKTIV ==1)
@@ -185,6 +191,10 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 	
 	uint32_t leseWert = analogRead(inAkkuSpannung);
 	spannungUmgerechnet = map(leseWert, 0, 1023, SPANNUNG_IN_MIN, SPANNUNG_IN_MAX_CALC);
+	spannungVoltDEC0 = spannungUmgerechnet/1000;
+	uint32_t spannungVoltDEC = spannungVoltDEC0*10;
+	spannungVoltDEC1 = spannungUmgerechnet/100;
+	spannungVoltDEC1 = spannungVoltDEC1-spannungVoltDEC;
 	
 	//Wenn letzte Zeit größer als jetztige, dann gab es einen overflow (nach 50 Tagen), dann setzt letzte Zeit zurück
 	if(letzteZeit > millis()) letzteZeit = 0;
@@ -322,44 +332,56 @@ void displayStart() {
 	display.display();
 }
 void displayAnzeigen() {
-	if((millis()%1000 >= 500) && (displaySenden == false)) {
-				// ssd1306_setFixedFont(ssd1306xled_font6x8);
-		// ssd1306_printFixed (0,  8, "Line 1. Normal text", STYLE_NORMAL);
-		// ssd1306_printFixed (0, 16, "Line 2. Bold text", STYLE_BOLD);
-		// ssd1306_printFixed (0, 24, "Line 3. Italic text", STYLE_ITALIC);
-		// ssd1306_printFixedN (0, 32, "Line 4. Double size", STYLE_BOLD, FONT_SIZE_2X);
-		// uint8_t buffer[64*32/8];
-		// NanoCanvas canvas(64,32, buffer);
-		// ssd1306_setFixedFont(ssd1306xled_font6x8);
-		// ssd1306_clearScreen();
-		// canvas.clear();
-		// ssd1306_setCursor(10, 10);
-		// ssd1306_write(pwmPulse);
-		// // canvas.fillRect(10, 3, 80, 10, 0xFF);
-		// //ssd1306_printFixed (10, 10, pwmPulse, STYLE_NORMAL);
-		// canvas.drawRect(1, 1, 30, 10);
-		// canvas.blt(1, 1);
+	if((millis()%500 >= 250) && (displaySenden == false)) {
+		blinkPulse = !blinkPulse;
 		display.clearDisplay();
-		display.setTextSize(1);             // Normal 1:1 pixel scale
-		display.setTextColor(SSD1306_WHITE);        // Draw white text
 		display.setCursor(0,0);             // Start at top-left corner
-		//display.println(F("Hello, world!"));
-		//display.println(pwmPulse);
+		display.setTextSize(2);             // Normal 1:1 pixel scale
+		display.setTextColor(SSD1306_WHITE);        // Draw white text
+		display.print(spannungVoltDEC0);
+		display.print(F("."));
+		display.print(spannungVoltDEC1);
+		display.println(F("V"));		
+        display.fillRect(65, 4, 4, 6, SSD1306_WHITE); 		//batterie Pluspol | x,y,width,height,color    
+		display.drawRect(69, 0, 58, 15, SSD1306_WHITE); 	//batterie Rahmen | x,y,width,height,color
 		
-		display.print(F("Pulsedauer: "));
-		display.print(pwmPulse);
-		display.println(F("us"));
-		display.print(F("Stufe:      "));
+		if(spannungUmgerechnet >= 20000) {
+			display.fillRect(71, 3, 12, 9, SSD1306_WHITE); 	//Batterie 4/4 voll | x,y,width,height,color
+		} else {
+			
+		}
+		if(spannungUmgerechnet >= 19000) {
+			display.fillRect(85, 3, 12, 9, SSD1306_WHITE); 	//Batterie 3/4 voll | x,y,width,height,color
+		} else {
+			display.drawLine(84, 3, 84, 11, SSD1306_WHITE); //Batterie Trennstrich | x,y,width,height,color
+		}
+		if(spannungUmgerechnet >= 18000) {
+			display.fillRect(99, 3, 12, 9, SSD1306_WHITE); 	//Batterie 4/4 voll | x,y,width,height,color
+		} else {
+			display.drawLine(98, 3, 98, 11, SSD1306_WHITE); //Batterie Trennstrich | x,y,width,height,color
+		}
+		if(spannungUmgerechnet >= 17000) {
+			display.fillRect(113, 3, 12, 9, SSD1306_WHITE); 	//Batterie 1/4 voll | x,y,width,height,color
+		} else {
+			if(blinkPulse) {
+				display.fillRect(113, 3, 12, 9, SSD1306_WHITE); 	//Batterie 1/4 voll | x,y,width,height,color	
+			} else {
+				display.drawLine(112, 3, 112, 11, SSD1306_WHITE); //Batterie Trennstrich | x,y,width,height,color
+			}
+		}
+		display.setCursor(0,16); // Start at top-left corner
+		//display.print(F("Pulsedauer: "));
+		//display.print(pwmPulse);
+		//display.println(F("us"));
+		display.setTextSize(1);  
+		display.print(F("Stufe:    "));
 		display.println(motorStufe);
-		display.print(F("Spannung:   "));
-		display.print(spannungUmgerechnet);
-		display.println(F("mV"));
-		display.print(F("Drehzahl:   "));
+		display.print(F("Drehzahl: "));
 		display.print(drehzahl);
 		display.println(F(" U/min"));
 		display.display();
 		displaySenden = true;
-	} else if((millis()%1000 < 500) && (displaySenden == true)) {
+	} else if((millis()%500 < 250) && (displaySenden == true)) {
 		displaySenden = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
 	}
 	

@@ -1,5 +1,9 @@
 Release Notes
 
+v0.1.6 19.06.2020
+- Spannung auswerten zum anzeigen mit Komma
+- Batterie Symbol mit grober funktion hinzugefügt
+
 v0.1.5 15.06.2020
 - Schaltplan aktualisiert
 - 2.te .ino Datei gelöscht
