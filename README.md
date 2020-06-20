@@ -15,6 +15,7 @@ Außerdem wird die Spannung des Akkus überwacht.
 1. Akkuspannung
 2. Stufe
 3. Drehzahl
+
 ![Display](https://raw.githubusercontent.com/SheepCreativeSoftware/BrushlessMotorcontroller/17ef158e8854fa49e351950c27a79363cce3a59d/Images/Testaufbau2.jpg)
 ***
 ### Initialisierung
