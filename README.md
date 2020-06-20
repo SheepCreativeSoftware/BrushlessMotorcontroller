@@ -15,6 +15,7 @@ Außerdem wird die Spannung des Akkus überwacht.
 1. Akkuspannung
 2. Stufe
 3. Drehzahl
+![Display](https://raw.githubusercontent.com/SheepCreativeSoftware/BrushlessMotorcontroller/master/Images/Testaufbau2.jpg)
 ***
 ### Initialisierung
 Zusätzlich lässt sich der Fahrregler initialisieren.
