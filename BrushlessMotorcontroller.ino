@@ -31,7 +31,7 @@
 #define SPANNUNG_KORREKTUR 0									//Korrektur der Spannung in mV
 	
 //Ändere diesen Wert für unterschiedliche Debuging level
-#define DEBUGLEVEL 3										//0 = Aus | 1 = N/A | >2 = Serial Monitor
+#define DEBUGLEVEL 0										//0 = Aus | 1 = N/A | >2 = Serial Monitor
 #define DISPLAY_AKTIV 1
 /************************************
  * Zusätzliche Dateien einbinden

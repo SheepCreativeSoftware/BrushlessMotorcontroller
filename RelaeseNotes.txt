@@ -1,5 +1,8 @@
 Release Notes
 
+v0.2.0 20.06.2020
+- Beta Release Version
+
 v0.1.7 20.06.2020
 - Studen anzeige und Drehzahl zum Display hinzugefügt
 - Tests durchgeführt
