@@ -33,7 +33,7 @@ Die Initialisierung ist abgeschlossen.
 
 ***
 ## Feedback
-Fehler kannst du hier berichten: [Issues](https://github.com/SheepCreativeSoftware/BrushlessMotorcontroller/issues)
+Fehler kannst du hier berichten: [Issues](https://github.com/SheepCreativeSoftware/BrushlessMotorcontroller/issues)<br/>
 Danach auf "New Issue"
 (hierfür wird ein Github Konto benötigt)
 
