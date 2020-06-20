@@ -1,5 +1,9 @@
 Release Notes
 
+v0.1.7 20.06.2020
+- Studen anzeige und Drehzahl zum Display hinzugefügt
+- Tests durchgeführt
+
 v0.1.6 19.06.2020
 - Spannung auswerten zum anzeigen mit Komma
 - Batterie Symbol mit grober funktion hinzugefügt

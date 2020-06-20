@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.1.6
- * Date: 19.06.2020 | 23:37
+ * BrushlessMotorcontroller v0.1.7
+ * Date: 20.06.2020 | 17:41
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -139,7 +139,7 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	tasterHoch.init(inTasterHoch, INPUT_PULLUP, ZEIT_TASTER_LANG);	
 	tasterRunter.init(inTasterRunter, INPUT_PULLUP, ZEIT_TASTER_LANG);
 	pinMode(inAkkuSpannung, INPUT);
-	pinMode(inTachoImpuls, INPUT_PULLUP);
+	pinMode(inTachoImpuls, INPUT);
 	/************************************
 	* Setup Outputs 
 	************************************/
@@ -153,7 +153,6 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	motorRegler.writeMicroseconds(MOTOR_MIN_PULSE); 		//Setze Ausgang auf 0% PWM (0-100% -> 1000-2000µs)
 	
 	attachInterrupt(digitalPinToInterrupt(inTachoImpuls), interruptRPM, RISING); //Setup Interrupt bei steigender Flanke
-	delay(3000);
 	#if (DEBUGLEVEL >=1)									//Bedingte Kompilierung
 		pinMode(statusLED, OUTPUT);							//status LED definieren zur Anzeige des Status
 	#endif		
@@ -163,6 +162,7 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	#if (DISPLAY_AKTIV ==1)
 	displayStart();
 	#endif
+	delay(2000);
 }
 
 void loop() {                       						// Hauptcode, wiederholt sich zyklisch     
@@ -338,6 +338,9 @@ void displayAnzeigen() {
 		display.setCursor(0,0);             // Start at top-left corner
 		display.setTextSize(2);             // Normal 1:1 pixel scale
 		display.setTextColor(SSD1306_WHITE);        // Draw white text
+		if(spannungVoltDEC0 < 10) {
+			display.print(F(" "));
+		}
 		display.print(spannungVoltDEC0);
 		display.print(F("."));
 		display.print(spannungVoltDEC1);
@@ -369,16 +372,55 @@ void displayAnzeigen() {
 				display.drawLine(112, 3, 112, 11, SSD1306_WHITE); //Batterie Trennstrich | x,y,width,height,color
 			}
 		}
-		display.setCursor(0,16); // Start at top-left corner
+		uint8_t balkenAnzahl;
+		uint8_t aktuellerBalken;
+		if(MOTOR_STUFEN <= 16) {
+			balkenAnzahl = MOTOR_STUFEN;
+			aktuellerBalken = motorStufe;
+		} else {
+			balkenAnzahl = 16;
+			aktuellerBalken = map(motorStufe, 0, MOTOR_STUFEN, 0, 16);
+			
+		}
+		uint8_t balkenBreite = 80/balkenAnzahl;
+		uint8_t balkenStartHoehe = 5;		
+		uint8_t balkenHoeheStufe = (32-balkenStartHoehe)/(balkenAnzahl-1);		
+		uint8_t balkenHoehe = balkenStartHoehe;
+		uint8_t aktuelleStufe = 1;
+		//display.drawRect(48, 16, 80, 32, SSD1306_WHITE); 	//batterie Rahmen | x,y,width,height,color
+		for(uint8_t i = 0; i < balkenAnzahl*balkenBreite; i+=balkenBreite){
+			if(aktuellerBalken >= aktuelleStufe) {
+				display.fillRect(49+i, 48-balkenHoehe, balkenBreite-2, balkenHoehe, SSD1306_WHITE); 	//batterie Rahmen | x,y,width,height,color
+			} else {
+				display.drawRect(49+i, 48-balkenHoehe, balkenBreite-2, balkenHoehe, SSD1306_WHITE); 	//batterie Rahmen | x,y,width,height,color
+			}
+			balkenHoehe += balkenHoeheStufe;
+			aktuelleStufe++;
+		}
+		//MOTOR_STUFEN
+		display.setCursor(8,20); // Start at top-left corner
 		//display.print(F("Pulsedauer: "));
 		//display.print(pwmPulse);
 		//display.println(F("us"));
 		display.setTextSize(1);  
-		display.print(F("Stufe:    "));
+		display.println(F("STUFE"));
+		display.setCursor(16,30); // Start at top-left corner
+		display.setTextSize(2);
+		//display.print(F(" ")); 
 		display.println(motorStufe);
-		display.print(F("Drehzahl: "));
+		display.setCursor(0,50); // Start at top-left corner
+		if(drehzahl < 10) {
+			display.print(F("    "));
+		} else  if(drehzahl < 100) {
+			display.print(F("   "));
+		} else  if(drehzahl < 1000) {
+			display.print(F("  "));
+		} else  if(drehzahl < 10000) {
+			display.print(F(" "));
+		}
 		display.print(drehzahl);
-		display.println(F(" U/min"));
+		display.setCursor(64,50); // Start at top-left corner
+		display.println(F("U/min"));
 		display.display();
 		displaySenden = true;
 	} else if((millis()%500 < 250) && (displaySenden == true)) {
