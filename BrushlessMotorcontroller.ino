@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.1.7
- * Date: 20.06.2020 | 17:41
+ * BrushlessMotorcontroller v0.2.1
+ * Date: 22.06.2020 | 21:12
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -28,7 +28,8 @@
 
 #define WIDERSTAND_R1 30000.0								//Widerstand gegen V+ für Spannungsmessung in Ohm (Wichtig Kommastelle(bzw. Punkt:'.') muss vorhanden sein)
 #define WIDERSTAND_R2 7500.0								//Widerstand gegen GND für Spannungsmessung in Ohm (Wichtig Kommastelle(bzw. Punkt:'.') muss vorhanden sein)
-#define SPANNUNG_KORREKTUR 0									//Korrektur der Spannung in mV
+#define SPANNUNG_KORREKTUR 0								//Korrektur der Spannung in mV
+#define MOTOR_POLZAHL 2										//Polzahl des Motors
 	
 //Ändere diesen Wert für unterschiedliche Debuging level
 #define DEBUGLEVEL 0										//0 = Aus | 1 = N/A | >2 = Serial Monitor
@@ -77,7 +78,9 @@ bool blinkPulse;
 
 uint16_t drehzahl = 0;
 volatile uint16_t volleUmdrehungen = 0;
+uint16_t letzteUmdrehungen = 0;
 uint32_t letzteZeit = 0;
+uint32_t letzteZeit2 = 0;
 
 #if (DISPLAY_AKTIV ==1)
 uint8_t displayAdress = 0;
@@ -100,6 +103,8 @@ uint8_t displayAdress = 0;
 
 //Funktionen
 void interruptRPM();
+void spannungUmrechnen();
+void drehzahlBerechnen();
 #if (DISPLAY_AKTIV ==1)
 void displayStart();
 void displayAnzeigen();
@@ -188,26 +193,9 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 		motorStufe = 0;
 	}
 	motorRegler.writeMicroseconds(pwmPulse);
+	spannungUmrechnen();
+	drehzahlBerechnen();
 	
-	uint32_t leseWert = analogRead(inAkkuSpannung);
-	spannungUmgerechnet = map(leseWert, 0, 1023, SPANNUNG_IN_MIN, SPANNUNG_IN_MAX_CALC);
-	spannungVoltDEC0 = spannungUmgerechnet/1000;
-	uint32_t spannungVoltDEC = spannungVoltDEC0*10;
-	spannungVoltDEC1 = spannungUmgerechnet/100;
-	spannungVoltDEC1 = spannungVoltDEC1-spannungVoltDEC;
-	
-	//Wenn letzte Zeit größer als jetztige, dann gab es einen overflow (nach 50 Tagen), dann setzt letzte Zeit zurück
-	if(letzteZeit > millis()) letzteZeit = 0;
-	//Berechnung der Drehzahl 2 * (halbe Sekunde / Zeitdauer * Anzahl Impulse)
-	if (volleUmdrehungen >= 10) {
-		drehzahl = 30*1000/(millis() - letzteZeit)*volleUmdrehungen;
-		drehzahl = drehzahl *2;
-		letzteZeit = millis();
-		volleUmdrehungen = 0;
-	}
-	
-	//wenn kein impuls seit länger als einer Minute kam, dann setzte drehzahl zurück.
-	if((millis() - letzteZeit) > 60000) drehzahl = 0;
 	#if (DEBUGLEVEL >= 1)
 		//Wenn einer der Taster gedrückt wird
 		if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
@@ -245,6 +233,40 @@ void loop() {                       						// Hauptcode, wiederholt sich zyklisch
 
 void interruptRPM() { //Wird bei jedem Impuls ausgeführt.
 	volleUmdrehungen++; 
+}
+
+void drehzahlBerechnen() {
+	//Wenn letzte Zeit größer als jetztige, dann gab es einen overflow (nach 50 Tagen), dann setzt letzte Zeit zurück
+	if(letzteZeit > millis()) letzteZeit = 0;
+	//Berechnung der Drehzahl 2 * (halbe Sekunde / Zeitdauer * Anzahl Impulse)
+	if (volleUmdrehungen >= 10) {
+		drehzahl = 30*1000/(millis() - letzteZeit)*volleUmdrehungen;
+		drehzahl = drehzahl *2;
+		uint8_t polpaarZahl = MOTOR_POLZAHL / 2;
+		if(polpaarZahl >= 2) {
+			drehzahl = drehzahl / polpaarZahl;
+		}
+		letzteZeit = millis();
+		volleUmdrehungen = 0;
+	}
+
+	//wenn kein impuls seit länger als einer Minute kam, dann setzte drehzahl zurück.
+	if(volleUmdrehungen != letzteUmdrehungen) {
+		letzteUmdrehungen = volleUmdrehungen;
+		letzteZeit2 = millis();
+	}
+	if((millis() - letzteZeit2) > 2000) {
+		drehzahl = 0;
+	}
+}
+
+void spannungUmrechnen() {
+	uint32_t leseWert = analogRead(inAkkuSpannung);
+	spannungUmgerechnet = map(leseWert, 0, 1023, SPANNUNG_IN_MIN, SPANNUNG_IN_MAX_CALC);
+	spannungVoltDEC0 = spannungUmgerechnet/1000;
+	uint32_t spannungVoltDEC = spannungVoltDEC0*10;
+	spannungVoltDEC1 = spannungUmgerechnet/100;
+	spannungVoltDEC1 = spannungVoltDEC1-spannungVoltDEC;
 }
 
 void TasterEntprellen::init(uint8_t tasterPin, uint8_t pinModus, uint16_t zeitLang){ //Pin des Tasters, Modus: INPUT oder INPUT_PULLUP, Dauer für lang
@@ -329,6 +351,7 @@ void displayStart() {
 
 	// Show initial display buffer contents on the screen --
 	// the library initializes this with an Adafruit splash screen.
+	display.clearDisplay();
 	display.display();
 }
 void displayAnzeigen() {
@@ -397,16 +420,11 @@ void displayAnzeigen() {
 			balkenHoehe += balkenHoeheStufe;
 			aktuelleStufe++;
 		}
-		//MOTOR_STUFEN
 		display.setCursor(8,20); // Start at top-left corner
-		//display.print(F("Pulsedauer: "));
-		//display.print(pwmPulse);
-		//display.println(F("us"));
 		display.setTextSize(1);  
 		display.println(F("STUFE"));
 		display.setCursor(16,30); // Start at top-left corner
 		display.setTextSize(2);
-		//display.print(F(" ")); 
 		display.println(motorStufe);
 		display.setCursor(0,50); // Start at top-left corner
 		if(drehzahl < 10) {

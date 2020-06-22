@@ -1,5 +1,12 @@
 Release Notes
 
+v0.2.1 22.06.2020
+- Berechnung für Polzahl hinzugefügt
+- Drehzahl anzeige auf 0 zurückstellen verbessert
+- Programmteile umstruckturiert
+- Code optimiert
+- Adafruit Logo entfernt
+
 v0.2.0 20.06.2020
 - Beta Release Version
 
