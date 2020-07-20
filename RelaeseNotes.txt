@@ -1,5 +1,14 @@
 Release Notes
 
+v1.0.0 20.07.2020
+- Verbesserung: Speicherbereich für Drehzalmessung erhöht
+- Verbesserung: Speicherladefehler während Interrupt Routine sicher verhindern
+- Englische Komentare übersetzt
+- Programm getestet
+- Restruckturieren des Programms
+- Versetzten von Programmteilen in separate Funktionen
+- Mehr Kommentare hinzugefügt
+
 v0.2.1 22.06.2020
 - Berechnung für Polzahl hinzugefügt
 - Drehzahl anzeige auf 0 zurückstellen verbessert

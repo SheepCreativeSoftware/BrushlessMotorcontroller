@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v0.2.1
- * Date: 22.06.2020 | 21:12
+ * BrushlessMotorcontroller v1.0.0
+ * Date: 20.07.2020 | 22:22
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -75,8 +75,7 @@ uint32_t spannungVoltDEC0 = 0;
 uint32_t spannungVoltDEC1 = 0;
 bool blinkPulse;
 
-
-uint16_t drehzahl = 0;
+uint32_t drehzahl = 0;
 volatile uint16_t volleUmdrehungen = 0;
 uint16_t letzteUmdrehungen = 0;
 uint32_t letzteZeit = 0;
@@ -85,12 +84,15 @@ uint32_t letzteZeit2 = 0;
 #if (DISPLAY_AKTIV ==1)
 uint8_t displayAdress = 0;
 #endif
+
 //Vorkompilierte Definitionen
 #define MOTOR_PULSE_BREITE (MOTOR_MAX_PULSE - MOTOR_MIN_PULSE)
 #define MOTOR_PULSE_STUFE (MOTOR_PULSE_BREITE / MOTOR_STUFEN)
-#ifndef	SerialUSB
+
+#ifndef	SerialUSB									//Definiere USB Port, wenn noch nicht definiert
 	#define SerialUSB SERIAL_PORT_MONITOR
 #endif
+
 //Funktion zum Berechnen der Spannung (Vout Ausgang Spannungsteiler/Eingang Arduino | Vin Eingang Spannungteiler/Akku)
 //Vout = Vin * (R2 / (R1 + R2))
 //Vin = Vout / (R2 / (R1 + R2))
@@ -103,15 +105,18 @@ uint8_t displayAdress = 0;
 
 //Funktionen
 void interruptRPM();
+void motorStellen();
 void spannungUmrechnen();
 void drehzahlBerechnen();
 #if (DISPLAY_AKTIV ==1)
+void debugRoutine();
 void displayStart();
 void displayAnzeigen();
 uint8_t i2cScan();
 #endif
 
 //Klassen
+//Klasse zum Entprellen der Taster
 class TasterEntprellen {
 		uint8_t pin;
 		uint8_t modus;										//INPUT 0x0 | INPUT_PULLUP 0x2
@@ -128,13 +133,14 @@ class TasterEntprellen {
 TasterEntprellen tasterHoch;								//definiere Klassen Instanz für Taster
 TasterEntprellen tasterRunter;								//definiere Klassen Instanz für Taster
 Servo motorRegler;											//definiere Klassen Instanz für Servo
+
 #if (DISPLAY_AKTIV ==1)
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-#endif
+#define SCREEN_WIDTH 128 // OLED Display Breite, in pixels
+#define SCREEN_HEIGHT 64 // OLED Display Höhe, in pixels
+// Deklaration für ein SSD1306 Display an I2C (SDA, SCL pins)
+#define OLED_RESET     -1 // Reset pin # (oder -1 wenn der Arduino sich den Reset Pin teilt)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#endif
 
 void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	/************************************
@@ -149,85 +155,36 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	* Setup Outputs 
 	************************************/
 	motorRegler.attach(outMotorRegler);
-		//Wenn beim start beide Taster gedrückt sind, dann führe Regler initialisierung durch.
+	// Wenn beim start beide Taster gedrückt sind, dann führe Regler initialisierung durch.
 	if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
 		while(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {	
-			motorRegler.writeMicroseconds(MOTOR_MAX_PULSE); 	//Setze Ausgang auf 100% PWM (0-100% -> 1000-2000µs)
+			motorRegler.writeMicroseconds(MOTOR_MAX_PULSE); 	// Setze Ausgang auf 100% PWM (0-100% -> 1000-2000µs)
 		}
 	}	
-	motorRegler.writeMicroseconds(MOTOR_MIN_PULSE); 		//Setze Ausgang auf 0% PWM (0-100% -> 1000-2000µs)
+	motorRegler.writeMicroseconds(MOTOR_MIN_PULSE); 		// Setze Ausgang auf 0% PWM (0-100% -> 1000-2000µs)
 	
 	attachInterrupt(digitalPinToInterrupt(inTachoImpuls), interruptRPM, RISING); //Setup Interrupt bei steigender Flanke
-	#if (DEBUGLEVEL >=1)									//Bedingte Kompilierung
-		pinMode(statusLED, OUTPUT);							//status LED definieren zur Anzeige des Status
+	#if (DEBUGLEVEL >=1)									// Bedingte Kompilierung
+		pinMode(statusLED, OUTPUT);							// Status LED definieren zur Anzeige des Status
 	#endif		
-	#if (DEBUGLEVEL >=2)									//Bedingte Kompilierung
-		SerialUSB.begin(9600);  							//Starte Serielle Kommunikation per USB
+	#if (DEBUGLEVEL >=2)									// Bedingte Kompilierung
+		SerialUSB.begin(9600);  							// Starte Serielle Kommunikation per USB
 	#endif
 	#if (DISPLAY_AKTIV ==1)
-	displayStart();
+		displayStart();										// Überprüfe zum Start die Adresse des Displays und starte Display Library
 	#endif
-	delay(2000);
+	delay(2000);											// Warte 2 Sekunden für Zyklischen Hauptcode
 }
 
 void loop() {                       						// Hauptcode, wiederholt sich zyklisch     
-	uint8_t dynTasterHoch = tasterHoch.leseTaster();		//lese aktuellen Status des Tasters
-	uint8_t dynTasterRunter = tasterRunter.leseTaster();	//lese aktuellen Status des Tasters
-	if(dynTasterHoch && dynTasterRunter){
-		//Nichts tun
-	} else if (dynTasterHoch == 1) {
-		if(motorStufe < MOTOR_STUFEN) {
-			pwmPulse += MOTOR_PULSE_STUFE;
-			motorStufe++;
-		}	
-	} else if (dynTasterHoch == 2) {
-		pwmPulse = MOTOR_MAX_PULSE;
-		motorStufe = MOTOR_STUFEN;
-	} else if (dynTasterRunter == 1) {
-		if(motorStufe > 0) {
-			pwmPulse -= MOTOR_PULSE_STUFE;
-			motorStufe--;
-		}	
-	} else if (dynTasterRunter == 2) {
-		pwmPulse = MOTOR_MIN_PULSE;
-		motorStufe = 0;
-	}
-	motorRegler.writeMicroseconds(pwmPulse);
-	spannungUmrechnen();
-	drehzahlBerechnen();
-	
-	#if (DEBUGLEVEL >= 1)
-		//Wenn einer der Taster gedrückt wird
-		if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
-			digitalWrite(statusLED, HIGH);					//Dann Setze Status LED
-		} else {
-			digitalWrite(statusLED, LOW);					//Ansonsten setzte Sie zurück
-		}
-	#endif
-	#if (DEBUGLEVEL >= 2)
-		//Wird jede Sekunde ausgeführt
-		if((millis()%1000 >= 500) && (serialIsSent == false)) {
-			SerialUSB.println(F("--PWM Pulsedauer--"));
-			SerialUSB.print(pwmPulse);
-			SerialUSB.println(F("µs"));
-			SerialUSB.println(F("------Stufe-------"));
-			SerialUSB.println(motorStufe);
-			SerialUSB.println(F("----Analogwert----"));
-			SerialUSB.println(leseWert);
-			SerialUSB.println(F("-----Spannung-----"));
-			SerialUSB.print(spannungUmgerechnet);
-			SerialUSB.println(F(" mV"));
-			SerialUSB.println(F("-----Drehzahl-----"));
-			SerialUSB.print(drehzahl);
-			SerialUSB.println(F(" U/min"));
-			SerialUSB.println(F("-------End--------"));
-			serialIsSent = true;
-		} else if((millis()%1000 < 500) && (serialIsSent == true)) {
-			serialIsSent = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
-		}
+	drehzahlBerechnen();									// Drehzahl berechnen
+	motorStellen();											// Code zum Stellen des Motors in jeweiliger Stufe nach Tasterdruck
+	spannungUmrechnen();									// Spannung zur anzeige im Display umrechen
+	#if (DEBUGLEVEL >=1)
+		debugRoutine();										// Routine für Debug Informationen
 	#endif
 	#if (DISPLAY_AKTIV ==1)
-	displayAnzeigen();
+		displayAnzeigen();									// Darstellung des Display laden
 	#endif
 }
 
@@ -235,41 +192,72 @@ void interruptRPM() { //Wird bei jedem Impuls ausgeführt.
 	volleUmdrehungen++; 
 }
 
-void drehzahlBerechnen() {
+void drehzahlBerechnen() {									// Drehzahl berechnen
 	//Wenn letzte Zeit größer als jetztige, dann gab es einen overflow (nach 50 Tagen), dann setzt letzte Zeit zurück
 	if(letzteZeit > millis()) letzteZeit = 0;
 	//Berechnung der Drehzahl 2 * (halbe Sekunde / Zeitdauer * Anzahl Impulse)
-	if (volleUmdrehungen >= 10) {
-		drehzahl = 30*1000/(millis() - letzteZeit)*volleUmdrehungen;
+	noInterrupts();											// Interrupt verhindern um Variable sicher zu lesen
+	uint32_t aktuelleUmdrehungen = volleUmdrehungen;
+	interrupts();											// Intterrupt wieder zulassen
+	if (aktuelleUmdrehungen >= 10) {
+		drehzahl = 30*1000/(millis() - letzteZeit)*aktuelleUmdrehungen;
 		drehzahl = drehzahl *2;
 		uint8_t polpaarZahl = MOTOR_POLZAHL / 2;
 		if(polpaarZahl >= 2) {
 			drehzahl = drehzahl / polpaarZahl;
 		}
 		letzteZeit = millis();
+		aktuelleUmdrehungen = 0;
+		noInterrupts();											// Interrupt verhindern um Variable sicher zu lesen
 		volleUmdrehungen = 0;
+		interrupts();											// Intterrupt wieder zulassen
 	}
-
 	//wenn kein impuls seit länger als einer Minute kam, dann setzte drehzahl zurück.
-	if(volleUmdrehungen != letzteUmdrehungen) {
-		letzteUmdrehungen = volleUmdrehungen;
+	if(aktuelleUmdrehungen != letzteUmdrehungen) {
+		letzteUmdrehungen = aktuelleUmdrehungen;
 		letzteZeit2 = millis();
 	}
+
 	if((millis() - letzteZeit2) > 2000) {
 		drehzahl = 0;
 	}
 }
 
-void spannungUmrechnen() {
-	uint32_t leseWert = analogRead(inAkkuSpannung);
-	spannungUmgerechnet = map(leseWert, 0, 1023, SPANNUNG_IN_MIN, SPANNUNG_IN_MAX_CALC);
-	spannungVoltDEC0 = spannungUmgerechnet/1000;
-	uint32_t spannungVoltDEC = spannungVoltDEC0*10;
-	spannungVoltDEC1 = spannungUmgerechnet/100;
-	spannungVoltDEC1 = spannungVoltDEC1-spannungVoltDEC;
+void motorStellen() {										// Code zum Stellen des Motors in jeweiliger Stufe nach Tasterdruck
+	uint8_t dynTasterHoch = tasterHoch.leseTaster();		// lese aktuellen Status des Tasters
+	uint8_t dynTasterRunter = tasterRunter.leseTaster();	// lese aktuellen Status des Tasters
+	if(dynTasterHoch && dynTasterRunter){					// Nichts tun, wenn beide Taster gedrückt sind
+	
+	} else if (dynTasterHoch == 1) {						// Erhöhe Stufe um 1, wenn Taster einfach gedrückt wird
+		if(motorStufe < MOTOR_STUFEN) {
+			pwmPulse += MOTOR_PULSE_STUFE;
+			motorStufe++;
+		}	
+	} else if (dynTasterHoch == 2) {						// Erhöhe Stufe auf Max, wenn Taster einfach gedrückt wird
+		pwmPulse = MOTOR_MAX_PULSE;
+		motorStufe = MOTOR_STUFEN;
+	} else if (dynTasterRunter == 1) {						// Verringere Stufe um 1, wenn Taster einfach gedrückt wird
+		if(motorStufe > 0) {
+			pwmPulse -= MOTOR_PULSE_STUFE;
+			motorStufe--;
+		}	
+	} else if (dynTasterRunter == 2) {						// Verringere Stufe auf Min, wenn Taster einfach gedrückt wird
+		pwmPulse = MOTOR_MIN_PULSE;
+		motorStufe = 0;
+	}
+	motorRegler.writeMicroseconds(pwmPulse);				// Schreibe aktuelle Motorsteuer-Impulse auf Ausgang
 }
 
-void TasterEntprellen::init(uint8_t tasterPin, uint8_t pinModus, uint16_t zeitLang){ //Pin des Tasters, Modus: INPUT oder INPUT_PULLUP, Dauer für lang
+void spannungUmrechnen() {									// Spannung zur anzeige im Display umrechen
+	uint32_t leseWert = analogRead(inAkkuSpannung);			// Lese Analogen Wert für Spannung
+	spannungUmgerechnet = map(leseWert, 0, 1023, SPANNUNG_IN_MIN, SPANNUNG_IN_MAX_CALC);	// Wandle Analogwert in Spannungswert in mA
+	spannungVoltDEC0 = spannungUmgerechnet/1000;			// Teile durch 1000 um Volt zu erhalten
+	uint32_t spannungVoltDEC = spannungVoltDEC0*10;			// Multipliziere um 10 zur Format gleichstellung, um Kommawert zu errechnen
+	spannungVoltDEC1 = spannungUmgerechnet/100;				// Teile durch 100 um Volt mit einer Kommastelle zu erhalten
+	spannungVoltDEC1 = spannungVoltDEC1-spannungVoltDEC;	// Subtrahiere Volt von Volt mit Kommastelle, um Kommastelle zu erhalten
+}
+
+void TasterEntprellen::init(uint8_t tasterPin, uint8_t pinModus, uint16_t zeitLang){ // Pin des Tasters, Modus: INPUT oder INPUT_PULLUP, Dauer für lang
 	zeitLangerDruck = zeitLang;							//Speichere Zeit in Instanz ab
 	pin = tasterPin;									//Speichere Pin in Instanz ab
 	modus = pinModus;									//Speichere Pinmodus in Instanz ab
@@ -311,11 +299,11 @@ uint8_t TasterEntprellen::leseTaster(){
 }
 
 #if (DISPLAY_AKTIV ==1)
-void displayStart() {
+void displayStart() {										// Überprüfe zum Start die Adresse des Displays und starte Display Library
 	
 	Wire.begin();
-	displayAdress = EEPROM.read(0);							//lese Display Adresse von EEPROM Adresse 0
-	#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+	displayAdress = EEPROM.read(0);							// lese Display Adresse von EEPROM Adresse 0
+	#if (DEBUGLEVEL >=3)									// Bedingte Kompilierung
 		SerialUSB.print(F("EEPROM Wert: 0x"));
 		if (displayAdress<16) {
 				SerialUSB.print(F("0"));
@@ -328,39 +316,39 @@ void displayStart() {
 		displayAdress = i2cScan();
 	} else {
 		Wire.beginTransmission(displayAdress);
-		error = Wire.endTransmission();
+		error = Wire.endTransmission();						// Wenn Rückgabewert ungleich 0, dann ist kein Gerät mit der Adresse auf dem Bus
 		if(error != 0) {
-			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+			#if (DEBUGLEVEL >=3)							// Bedingte Kompilierung
 				SerialUSB.println(F("Adresse aus EMPROM nicht ansprechbar"));
 			#endif
 			displayAdress = i2cScan();
-			EEPROM.update(0, displayAdress);
+			EEPROM.update(0, displayAdress);				// Speichere Adresse auf EEPROM
 		} else {
-			#if (DEBUGLEVEL >=3)									//Bedingte Kompilierung
+			#if (DEBUGLEVEL >=3)							//Bedingte Kompilierung
 				SerialUSB.println(F("Adresse aus EEPROM ansprechbar!"));
 			#endif
 		}
 	}
-	
+	// Starte Display, falls nicht möglich setze Fehler
 	if(!display.begin(SSD1306_SWITCHCAPVCC, displayAdress, true, false)) { // Address 0x3D for 128x64
 		#if (DEBUGLEVEL >=3)
 		Serial.println(F("SSD1306 Zuweisung gescheitert"));
 		#endif
-		for(;;); // Don't proceed, loop forever
+		for(;;); // Nicht weiter machen, Dauerschleife
 	}
 
-	// Show initial display buffer contents on the screen --
-	// the library initializes this with an Adafruit splash screen.
+	// Lösche und aktualisiere Display
 	display.clearDisplay();
 	display.display();
 }
-void displayAnzeigen() {
-	if((millis()%500 >= 250) && (displaySenden == false)) {
+
+void displayAnzeigen() {									// Darstellung des Display laden
+	if((millis()%500 >= 250) && (displaySenden == false)) {	// Führe nur in bestimmten Zeit Abstand aus
 		blinkPulse = !blinkPulse;
 		display.clearDisplay();
-		display.setCursor(0,0);             // Start at top-left corner
-		display.setTextSize(2);             // Normal 1:1 pixel scale
-		display.setTextColor(SSD1306_WHITE);        // Draw white text
+		display.setCursor(0,0);             				// Start at top-left corner
+		display.setTextSize(2);             				// Normal 1:1 pixel scale
+		display.setTextColor(SSD1306_WHITE);        		// Male weißen text
 		if(spannungVoltDEC0 < 10) {
 			display.print(F(" "));
 		}
@@ -368,26 +356,26 @@ void displayAnzeigen() {
 		display.print(F("."));
 		display.print(spannungVoltDEC1);
 		display.println(F("V"));		
-        display.fillRect(65, 4, 4, 6, SSD1306_WHITE); 		//batterie Pluspol | x,y,width,height,color    
-		display.drawRect(69, 0, 58, 15, SSD1306_WHITE); 	//batterie Rahmen | x,y,width,height,color
+        display.fillRect(65, 4, 4, 6, SSD1306_WHITE); 		// Batterie Pluspol | x,y,width,height,color    
+		display.drawRect(69, 0, 58, 15, SSD1306_WHITE); 	// Batterie Rahmen | x,y,width,height,color
 		
 		if(spannungUmgerechnet >= 20000) {
-			display.fillRect(71, 3, 12, 9, SSD1306_WHITE); 	//Batterie 4/4 voll | x,y,width,height,color
+			display.fillRect(71, 3, 12, 9, SSD1306_WHITE); 	// Batterie 4/4 voll | x,y,width,height,color
 		} else {
 			
 		}
 		if(spannungUmgerechnet >= 19000) {
-			display.fillRect(85, 3, 12, 9, SSD1306_WHITE); 	//Batterie 3/4 voll | x,y,width,height,color
+			display.fillRect(85, 3, 12, 9, SSD1306_WHITE); 	// Batterie 3/4 voll | x,y,width,height,color
 		} else {
-			display.drawLine(84, 3, 84, 11, SSD1306_WHITE); //Batterie Trennstrich | x,y,width,height,color
+			display.drawLine(84, 3, 84, 11, SSD1306_WHITE); // Batterie Trennstrich | x,y,width,height,color
 		}
 		if(spannungUmgerechnet >= 18000) {
-			display.fillRect(99, 3, 12, 9, SSD1306_WHITE); 	//Batterie 4/4 voll | x,y,width,height,color
+			display.fillRect(99, 3, 12, 9, SSD1306_WHITE); 	// Batterie 4/4 voll | x,y,width,height,color
 		} else {
-			display.drawLine(98, 3, 98, 11, SSD1306_WHITE); //Batterie Trennstrich | x,y,width,height,color
+			display.drawLine(98, 3, 98, 11, SSD1306_WHITE); // Batterie Trennstrich | x,y,width,height,color
 		}
 		if(spannungUmgerechnet >= 17000) {
-			display.fillRect(113, 3, 12, 9, SSD1306_WHITE); 	//Batterie 1/4 voll | x,y,width,height,color
+			display.fillRect(113, 3, 12, 9, SSD1306_WHITE); // Batterie 1/4 voll | x,y,width,height,color
 		} else {
 			if(blinkPulse) {
 				display.fillRect(113, 3, 12, 9, SSD1306_WHITE); 	//Batterie 1/4 voll | x,y,width,height,color	
@@ -447,7 +435,7 @@ void displayAnzeigen() {
 	
 }
 
-uint8_t i2cScan() {
+uint8_t i2cScan() {											// Scanne I2C Bus, um Adresse des Display herauszufinden
 	uint8_t error, address, outValue;
 	uint8_t nDevices = 0;
 	SerialUSB.println(F("--Scane I2C Bus--"));
@@ -487,4 +475,35 @@ uint8_t i2cScan() {
 	return outValue;
 }
 #endif
-
+#if (DEBUGLEVEL >=1)
+void debugRoutine() {										// Routine für Debug Informationen
+	#if (DEBUGLEVEL >= 1)
+	//Wenn einer der Taster gedrückt wird
+	if(!digitalRead(inTasterHoch) || !digitalRead(inTasterRunter)) {
+		digitalWrite(statusLED, HIGH);					//Dann Setze Status LED
+	} else {
+		digitalWrite(statusLED, LOW);					//Ansonsten setzte Sie zurück
+	}
+	#endif
+	#if (DEBUGLEVEL >= 2)
+		//Wird jede Sekunde ausgeführt
+		if((millis()%1000 >= 500) && (serialIsSent == false)) {
+			SerialUSB.println(F("--PWM Pulsedauer--"));
+			SerialUSB.print(pwmPulse);
+			SerialUSB.println(F("µs"));
+			SerialUSB.println(F("------Stufe-------"));
+			SerialUSB.println(motorStufe);
+			SerialUSB.println(F("-----Spannung-----"));
+			SerialUSB.print(spannungUmgerechnet);
+			SerialUSB.println(F(" mV"));
+			SerialUSB.println(F("-----Drehzahl-----"));
+			SerialUSB.print(drehzahl);
+			SerialUSB.println(F(" U/min"));
+			SerialUSB.println(F("-------End--------"));
+			serialIsSent = true;
+		} else if((millis()%1000 < 500) && (serialIsSent == true)) {
+			serialIsSent = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
+		}
+	#endif
+}
+#endif
