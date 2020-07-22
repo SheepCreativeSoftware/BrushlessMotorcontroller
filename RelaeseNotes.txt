@@ -1,5 +1,8 @@
 Release Notes
 
+v1.0.1 22.07.2020
+- verzögerte Drehzahl berechnung, alle 100ms; Mehr Präzision bei hoher Drehzahl
+
 v1.0.0 20.07.2020
 - Verbesserung: Speicherbereich für Drehzalmessung erhöht
 - Verbesserung: Speicherladefehler während Interrupt Routine sicher verhindern

@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v1.0.0
- * Date: 20.07.2020 | 22:22
+ * BrushlessMotorcontroller v1.0.1
+ * Date: 22.07.2020 | 21:40
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -70,6 +70,7 @@ uint16_t pwmPulse = MOTOR_MIN_PULSE;
 uint8_t motorStufe = 0;
 bool serialIsSent = 0;
 bool displaySenden = 0;
+bool drehzahlBerechnet = 0;
 uint32_t spannungUmgerechnet = 0;
 uint32_t spannungVoltDEC0 = 0;
 uint32_t spannungVoltDEC1 = 0;
@@ -196,23 +197,32 @@ void drehzahlBerechnen() {									// Drehzahl berechnen
 	//Wenn letzte Zeit größer als jetztige, dann gab es einen overflow (nach 50 Tagen), dann setzt letzte Zeit zurück
 	if(letzteZeit > millis()) letzteZeit = 0;
 	//Berechnung der Drehzahl 2 * (halbe Sekunde / Zeitdauer * Anzahl Impulse)
-	noInterrupts();											// Interrupt verhindern um Variable sicher zu lesen
-	uint32_t aktuelleUmdrehungen = volleUmdrehungen;
-	interrupts();											// Intterrupt wieder zulassen
-	if (aktuelleUmdrehungen >= 10) {
-		drehzahl = 30*1000/(millis() - letzteZeit)*aktuelleUmdrehungen;
-		drehzahl = drehzahl *2;
-		uint8_t polpaarZahl = MOTOR_POLZAHL / 2;
-		if(polpaarZahl >= 2) {
-			drehzahl = drehzahl / polpaarZahl;
-		}
-		letzteZeit = millis();
-		aktuelleUmdrehungen = 0;
+	uint32_t aktuelleUmdrehungen = 0;
+	if((millis()%100 >= 25) && (drehzahlBerechnet == false)) {	// Führe nur in bestimmten Zeit Abstand aus
 		noInterrupts();											// Interrupt verhindern um Variable sicher zu lesen
-		volleUmdrehungen = 0;
+		aktuelleUmdrehungen = volleUmdrehungen;
 		interrupts();											// Intterrupt wieder zulassen
+		if (aktuelleUmdrehungen >= 10) {
+			#if (DEBUGLEVEL >=3)
+				SerialUSB.println("umdrehungen");
+				SerialUSB.println(aktuelleUmdrehungen);
+			#endif
+			drehzahl = 30*1000/(millis() - letzteZeit)*aktuelleUmdrehungen;
+			drehzahl = drehzahl *2;
+			uint8_t polpaarZahl = MOTOR_POLZAHL / 2;
+			if(polpaarZahl >= 2) {
+				drehzahl = drehzahl / polpaarZahl;
+			}
+			letzteZeit = millis();
+			noInterrupts();											// Interrupt verhindern um Variable sicher zu lesen
+			volleUmdrehungen = 0;
+			interrupts();											// Intterrupt wieder zulassen
+		}
+		drehzahlBerechnet = true;
+	} else if((millis()%100 < 25) && (drehzahlBerechnet == true)) {
+		drehzahlBerechnet = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
 	}
-	//wenn kein impuls seit länger als einer Minute kam, dann setzte drehzahl zurück.
+	//wenn kein impuls seit länger als zwei sekunden kam, dann setzte drehzahl zurück.
 	if(aktuelleUmdrehungen != letzteUmdrehungen) {
 		letzteUmdrehungen = aktuelleUmdrehungen;
 		letzteZeit2 = millis();
@@ -220,6 +230,10 @@ void drehzahlBerechnen() {									// Drehzahl berechnen
 
 	if((millis() - letzteZeit2) > 2000) {
 		drehzahl = 0;
+		letzteZeit2 = millis();
+		#if (DEBUGLEVEL >=3)
+			SerialUSB.println("drehzahl reset");
+		#endif
 	}
 }
 
