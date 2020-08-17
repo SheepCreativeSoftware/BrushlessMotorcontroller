@@ -1,6 +1,6 @@
 /*
- * BrushlessMotorcontroller v1.0.1
- * Date: 22.07.2020 | 21:40
+ * BrushlessMotorcontroller v1.0.2
+ * Date: 17.08.2020 | 15:38
  * <Motorcontroller um einen Regler mit Brushlessmotor anzusteuern und per Tastendruck die Drehzahl zu verändern>
  * Copyright (C) 2020 Marina Egner <info@sheepindustries.de>
  *
@@ -151,7 +151,11 @@ void setup() {												// Setup Code, wird einmalig am Start ausgeführt
 	tasterHoch.init(inTasterHoch, INPUT_PULLUP, ZEIT_TASTER_LANG);	
 	tasterRunter.init(inTasterRunter, INPUT_PULLUP, ZEIT_TASTER_LANG);
 	pinMode(inAkkuSpannung, INPUT);
+	#if (DEBUGLEVEL >= 2)
+	pinMode(inTachoImpuls, INPUT_PULLUP);
+	#else
 	pinMode(inTachoImpuls, INPUT);
+	#endif
 	/************************************
 	* Setup Outputs 
 	************************************/
@@ -218,23 +222,29 @@ void drehzahlBerechnen() {									// Drehzahl berechnen
 			volleUmdrehungen = 0;
 			interrupts();											// Intterrupt wieder zulassen
 		}
+		//wenn kein impuls seit länger als zwei sekunden kam, dann setzte drehzahl zurück.
+		if(aktuelleUmdrehungen != letzteUmdrehungen) {
+			#if (DEBUGLEVEL >=3)
+				SerialUSB.println("drehzahl ungleich");
+				SerialUSB.println(letzteUmdrehungen);
+				SerialUSB.println(aktuelleUmdrehungen);
+			#endif
+			letzteUmdrehungen = aktuelleUmdrehungen;
+			letzteZeit2 = millis();
+		}
+
+		if((millis() - letzteZeit2) > 2000) {
+			drehzahl = 0;
+			letzteZeit2 = millis();
+			#if (DEBUGLEVEL >=3)
+				SerialUSB.println("drehzahl reset");
+			#endif
+		}
 		drehzahlBerechnet = true;
 	} else if((millis()%100 < 25) && (drehzahlBerechnet == true)) {
 		drehzahlBerechnet = false;							//Stellt sicher, dass Code nur einmal je Sekunde ausgeführt wird.
 	}
-	//wenn kein impuls seit länger als zwei sekunden kam, dann setzte drehzahl zurück.
-	if(aktuelleUmdrehungen != letzteUmdrehungen) {
-		letzteUmdrehungen = aktuelleUmdrehungen;
-		letzteZeit2 = millis();
-	}
-
-	if((millis() - letzteZeit2) > 2000) {
-		drehzahl = 0;
-		letzteZeit2 = millis();
-		#if (DEBUGLEVEL >=3)
-			SerialUSB.println("drehzahl reset");
-		#endif
-	}
+	
 }
 
 void motorStellen() {										// Code zum Stellen des Motors in jeweiliger Stufe nach Tasterdruck
@@ -499,7 +509,7 @@ void debugRoutine() {										// Routine für Debug Informationen
 		digitalWrite(statusLED, LOW);					//Ansonsten setzte Sie zurück
 	}
 	#endif
-	#if (DEBUGLEVEL >= 2)
+	#if (DEBUGLEVEL >= 2 && DEBUGLEVEL <= 3 )
 		//Wird jede Sekunde ausgeführt
 		if((millis()%1000 >= 500) && (serialIsSent == false)) {
 			SerialUSB.println(F("--PWM Pulsedauer--"));
